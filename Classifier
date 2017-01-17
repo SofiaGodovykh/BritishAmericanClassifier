@@ -1,0 +1,116 @@
+import os
+from sklearn.feature_extraction.text import CountVectorizer
+from sklearn.feature_extraction.text import TfidfTransformer
+from sklearn.pipeline import Pipeline
+import random
+from sklearn.linear_model import SGDClassifier
+import cPickle
+from sklearn.model_selection import cross_val_score
+from sklearn.feature_extraction import text
+
+
+def get_training_data(number_of_samples, folder_path, y_class, seed=0):
+    """
+    :type number_of_samples: int
+    :type folder_path: str
+    :type y_class: int
+    :type seed: int
+    :return: tuple(data, target)
+    """
+    data = []
+    target = []
+    random.seed(seed)
+    for path, subdirs, files in os.walk(folder_path):
+        indexes = random.sample(range(0, len(files)), number_of_samples)
+        for index in indexes:
+            with open(os.path.join(path, files[index])) as f:
+                content = f.read()
+                if len(content) != 0:
+                    data.append(content)
+                    target.append(y_class)
+    result = (data, target)
+    return result
+
+
+def fit_classifier(data, target):
+    """
+    :type data:
+    :type target:
+    :return: pipeline with fitted classificator
+    """
+    pipeline = Pipeline([
+        ('vect', CountVectorizer(stop_words=modify_stop_words(), ngram_range=(1, 1))),
+        ('tfidf', TfidfTransformer(use_idf=True, norm='l2', smooth_idf=True)),
+        ('clf', SGDClassifier(alpha=0.001, fit_intercept=True, n_iter=10, penalty='l2', loss='epsilon_insensitive')),
+    ])
+    pipeline.fit(data, target)
+    return pipeline
+
+
+def cross_val(pipeline, data, target):
+    """
+    :param target: target array
+    :param data: data array
+    :param pipeline: fitted pipeline
+    :return: array of cross validaton accuracy
+    """
+    return cross_val_score(pipeline, data, target, cv=5)
+
+
+def save_pipeline(name, pipeline):
+    with open(name, 'wb') as f:
+        cPickle.dump(pipeline, f)
+
+
+def classify(pipeline, texts):
+    """
+    :param pipeline: fitted pipeline
+    :param texts: list of text to classify
+    :return: predicted class and distance to the separating line
+    """
+    predicted = pipeline.predict(texts)
+    return {'class': predicted, 'decision_function': pipeline.decision_function(texts)[0]}
+
+
+def print_top(pipeline, n):
+    """
+    :type pipeline: Pipeline
+    :param n: number of printed features, int
+    :return: prints the most important features with weights
+    """
+    feature_names = pipeline.named_steps.get('vect').get_feature_names()
+    coefs = sorted(zip(pipeline.named_steps.get('clf').coef_[0], feature_names))
+    top = zip(coefs[:n], coefs[:-(n + 1):-1])
+    for (coef_1, fn_1), (coef_2, fn_2) in top:
+        print "\t%.4f\t%-15s\t\t%.4f\t%-15s" % (coef_1, fn_1, coef_2, fn_2)
+
+
+def modify_stop_words(custom_stop_words=['did', 'll', 'didn', '00', '16mo']):
+    """
+    :param custom_stop_words: list of custom stop words
+    :return: list of default english stopwords with custom stopwords
+    """
+    stop_words = text.ENGLISH_STOP_WORDS.union(custom_stop_words)
+    return stop_words
+
+
+def load_classifier(name):
+    """
+    :param name: classifier name
+    :return: classifier
+    """
+    f = open(name, 'rb')
+    classifier = cPickle.load(f)
+    f.close()
+    return classifier
+
+
+def load_text(name):
+    """
+    :param name: file name
+    :return: content of the file
+    """
+    with open(name, 'rb') as f:
+        data_text = f.read()
+    f.close()
+    return data_text
