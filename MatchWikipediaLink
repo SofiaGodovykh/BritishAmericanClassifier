@@ -1,0 +1,41 @@
+import xml.etree.ElementTree as ET
+
+
+def save_metadata_to_js(mypath, jsonfile):
+    """
+    maked json file with wikipedia links and corresponding gutenber metadata file names
+    :param metadata_folder_path:
+    :param jsonfile: file to dump book's data
+    """
+    dictionary = dict()
+    with open(jsonfile, 'wb+') as outfile:
+        for path, subdirs, files in os.walk(mypath):
+            for name in files:
+                if name == '.DS_Store':
+                    continue
+                file = open(os.path.join(path, name))
+                try:
+                    tree = ET.parse(file)
+                    pgterms_namespace = "{http://www.gutenberg.org/2009/pgterms/}"
+                    rdf_namespace = "{http://www.w3.org/1999/02/22-rdf-syntax-ns#}"
+                    dcterms_namespace = "{http://purl.org/dc/terms/}"
+                    link = "{0}about".format(rdf_namespace)
+                    link_query = './{0}Description[@{1}]'.format(rdf_namespace, link)
+                    link_value = tree.find(link_query).attrib[link]
+
+                    lang_query = './{0}ebook/{1}language/{2}Description/{3}value[@{4}datatype=\'http://purl.org/dc/terms/RFC4646\']' \
+                        .format(pgterms_namespace, dcterms_namespace, rdf_namespace, rdf_namespace, rdf_namespace)
+                    lang_value = tree.find(lang_query).text
+                    if lang_value == 'en' or lang_value is None:
+                        value = dictionary.get(link_value)
+                        if value is None:
+                            dictionary.update({link_value: [name]})
+                        else:
+                            value.append(name)
+                            dictionary.update({link_value: value})
+
+                except Exception:
+                    print Exception.message
+
+        json.dump(dictionary, outfile)
+
